@@ -1,0 +1,6 @@
+"","ID","p_ora","p_gsea","p_gscore","Description"
+"1","GO:0000139",1,1,0,"Golgi membrane"
+"2","GO:0000786",1,1,0,"nucleosome"
+"3","GO:0002250",1,1,0,"adaptive immune response"
+"4","GO:0003677",1,1,0,"DNA binding"
+"5","GO:0003723",1,1,0,"RNA binding"
