@@ -1,29 +1,22 @@
-# --------------------------------------------------------------------------
-# Script: 02_differential_expression.r
-# Objective: Run DESeq2 and create a ranked gene list for GSEA/GScore
-# --------------------------------------------------------------------------
+
 
 library(DESeq2)
 library(dplyr)
 library(ggplot2)
-library(EnhancedVolcano) # Great for high-quality DE visualization
+library(EnhancedVolcano) 
 
 # 1. Load the filtered counts from script 01
 dds <- DESeqDataSet(readRDS("outputs/raw_counts_filtered.rds"), design = ~ definition)
 
 # 2. Run Differential Expression Analysis
 message("--- Running DESeq2 (Wald Test) ---")
-# This performs estimation of size factors, dispersions, and the GLM fit
 dds <- DESeq(dds)
 
 # 1. Extract results specifically comparing Tumor to Normal
-# Contrast format: c("factor_name", "numerator_level", "denominator_level")
 res <- results(dds, 
                contrast = c("definition", "Primary solid Tumor", "Solid Tissue Normal"))
 
 # 2. Run Shrinkage
-# Since "Solid Tissue Normal" isn't the reference, we use the 'ashr' or 'normal' 
-# shrinkage type which supports arbitrary contrasts (apeglm only likes coefficients)
 message("--- Running LFC Shrinkage ---")
 res_shrunken <- lfcShrink(dds, 
                           contrast = c("definition", "Primary solid Tumor", "Solid Tissue Normal"), 
@@ -83,7 +76,7 @@ print(summary_table)
 
 #Handling infinite ranks
 
-# 1. Load your ranked list
+# 1. Load  ranked list
 ranked_list <- readRDS("outputs/ranked_gene_list.rds")
 
 # 2. Check for Infinite values
@@ -92,10 +85,8 @@ message("Number of infinite values found: ", inf_count)
 
 # 3. Replace Infinite values
 if(inf_count > 0){
-  # Find the maximum absolute finite value
   max_finite <- max(abs(ranked_list[is.finite(ranked_list)]))
-  
-  # Replace Inf with max_finite * 1.1 (10% higher)
+ 
   ranked_list[ranked_list == Inf] <- max_finite * 1.1
   ranked_list[ranked_list == -Inf] <- -max_finite * 1.1
   
@@ -106,7 +97,6 @@ if(inf_count > 0){
 ranked_list <- ranked_list[!is.na(names(ranked_list))]
 
 
-# We want to keep the duplicate with the highest absolute rank (most significant)
 message("Original list size: ", length(ranked_list))
 
 # Sort by absolute value descending
@@ -116,7 +106,6 @@ ranked_list <- ranked_list[order(abs(ranked_list), decreasing = TRUE)]
 ranked_list <- ranked_list[!duplicated(names(ranked_list))]
 
 # 3. Final Cleaning
-# Sort back into standard descending order for GSEA
 ranked_list <- sort(ranked_list, decreasing = TRUE)
 
 message("Deduplicated list size: ", length(ranked_list))

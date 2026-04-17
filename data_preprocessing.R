@@ -1,7 +1,3 @@
-# --------------------------------------------------------------------------
-# Script: 01_data_preprocessing.r
-# Objective: Download TCGA CRC data, Map IDs, and perform VST Normalization
-# --------------------------------------------------------------------------
 
 # 1. Load Libraries
 library(TCGAbiolinks)
@@ -17,7 +13,6 @@ dir.create("outputs/tables", recursive = TRUE, showWarnings = FALSE)
 dir.create("outputs/figures", recursive = TRUE, showWarnings = FALSE)
 
 # 2. Data Acquisition (TCGA-COAD and TCGA-READ)
-# We focus on Primary Tumors and Solid Tissue Normals
 message("--- Downloading TCGA CRC Data ---")
 query_crc <- GDCquery(
   project = c("TCGA-COAD", "TCGA-READ"),
@@ -36,7 +31,6 @@ message("--- Preparing Data (This may take 5-10 mins) ---")
 data_crc <- GDCprepare(query_crc, directory = "GDCdata")
 
 # 3. ID Mapping (Ensembl to Gene Symbol & Entrez)
-# TCGA uses Ensembl IDs (with version numbers, e.g., ENSG000001.12)
 message("--- Mapping Gene Identifiers ---")
 gene_metadata <- as.data.frame(rowData(data_crc))
 
@@ -53,19 +47,15 @@ mapping <- mapIds(org.Hs.eg.db,
 rowData(data_crc)$entrez_id <- mapping
 
 # 4. Pre-filtering
-# Remove low-count genes to reduce noise and computational load
-# Keep genes with at least 10 counts in at least 3 samples
 keep <- rowSums(assay(data_crc) >= 10) >= 3
 data_filtered <- data_crc[keep, ]
 
 # 5. Normalization: Variance Stabilizing Transformation (VST)
-# VST is preferred over rlog for larger datasets (like TCGA)
 message("--- Performing VST Normalization ---")
 dds <- DESeqDataSet(data_filtered, design = ~ definition)
 vsd <- vst(dds, blind = FALSE)
 
 # 6. Save Outputs
-# Save the SummarizedExperiment objects for the next scripts
 saveRDS(data_filtered, "outputs/raw_counts_filtered.rds")
 saveRDS(vsd, "outputs/vst_normalized_data.rds")
 
@@ -85,7 +75,6 @@ message("Total Samples: ", total_samples)
 print(sample_counts)
 
 # 7. Quality Control Figure: PCA Plot
-# We use VST data to see if samples cluster by 'Normal' vs 'Tumor'
 pca_data <- plotPCA(vsd, intgroup = "definition", returnData = FALSE) 
 
 # Generate and save the plot

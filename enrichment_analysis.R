@@ -4,11 +4,10 @@ library(org.Hs.eg.db)
 library(AnnotationDbi)
 library(dplyr)
 
-# 1. Load Data from Script 02
+# 1. Load Data
 res_df <- readRDS("outputs/de_results_full.rds")
 ranked_list <- readRDS("outputs/ranked_gene_list.rds")
 
-# Define "Significant Genes" for ORA (Adjust p < 0.05 and |LFC| > 1)
 sig_genes <- res_df %>% 
   filter(padj < 0.05 & abs(log2FoldChange) > 1) %>% 
   pull(entrez_id)
@@ -41,38 +40,16 @@ set.seed(42)
 gsea_go <- gseGO(geneList = ranked_list, OrgDb = org.Hs.eg.db, ont = "BP", pvalueCutoff = 0.05, eps = 0, verbose = FALSE)
 gsea_kegg <- gseKEGG(geneList = ranked_list, organism = 'hsa', pvalueCutoff = 0.05)
 
-#'=============Delete==============================
-gseares <- readRDS("outputs/gsea_results.rds")
-gsea_go <- gseares$go
-gsea_kegg <- gseares$kegg
-total_gsea_go <- nrow(as.data.frame(gsea_go))
-total_gsea_kegg <- nrow(as.data.frame(gsea_kegg))
-cat("Total GSEA GO BP:", total_gsea_go, "\n")
-cat("Total GSEA KEGG:", total_gsea_kegg, "\n")
 
-# Extract Top 10 Terms for the Text and Table
-top_10_gseago <- as.data.frame(gsea_go) %>% head(10)
-top_10_gseakegg <- as.data.frame(gsea_kegg) %>% head(10)
-
-gsea_go_clean <- as.data.frame(gsea_go) %>%
-  select(ID, Description, NES, pvalue, p.adjust) %>%
-  head(10)
-
-gsea_kegg_clean <- as.data.frame(gsea_kegg) %>%
-  select(ID, Description, NES, pvalue, p.adjust) %>%
-  head(10)
-#'=============Delete======================================
 
 library(org.Hs.eg.db)
 library(dplyr)
 library(reshape2)
 
-# 1. Prepare Data
+# Prepare Data
 tumor_samples <- colData(vsd)$barcode[vsd$definition == "Primary solid Tumor"]
 tumor_counts <- assay(vsd)[, tumor_samples]
 
-# IMPORTANT: Ensure rownames of counts are Entrez IDs
-# We fetch the mapping from the vsd object we created in script 01
 entrez_ids <- rowData(vsd)$entrez_id
 rownames(tumor_counts) <- entrez_ids
 
@@ -85,7 +62,7 @@ tumor_counts_sig <- tumor_counts[rownames(tumor_counts) %in% sig_entrez, ]
 
 message("Genes in Correlation Matrix: ", nrow(tumor_counts_sig))
 
-# 2. Calculate Correlation Matrix
+# Calculate Correlation Matrix
 cor_matrix <- cor(t(tumor_counts_sig), method = "pearson")
 
 message("Sample IDs in cor_matrix: ", paste(head(rownames(cor_matrix)), collapse=", "))
@@ -96,19 +73,19 @@ kegg_table <- kegg_data$KEGGPATHID2EXTID
 
 kegg_sets <- split(as.character(kegg_table[,2]), as.character(kegg_table[,1]))
 
-# extract GO BP Sets (Fixed logic)
+
 go_annots <- AnnotationDbi::select(org.Hs.eg.db, 
                                    keys = keys(org.Hs.eg.db), 
                                    columns = c("ENTREZID", "GO"), 
                                    keytype = "ENTREZID")
 
-# Filter for BP and create a clean list
+
 go_bp_only <- go_annots %>% filter(!is.na(GO)) 
 go_sets <- split(as.character(go_bp_only$ENTREZID), 
                  as.character(go_bp_only$GO))
 
 
-# 4. Improved GScore Engine
+# 4. GSCORE
 run_gscore_analysis <- function(gene_set_list, cor_mat, threshold = 0.5) {
   all_genes <- rownames(cor_mat)
   if(length(all_genes) < 2) return(NULL)
@@ -121,8 +98,6 @@ run_gscore_analysis <- function(gene_set_list, cor_mat, threshold = 0.5) {
   
   results <- lapply(names(gene_set_list), function(gs_name) {
     gs_genes <- intersect(as.character(gene_set_list[[gs_name]]), all_genes)
-    
-    # Lowered threshold to 5 genes to see if we get any results initially
     if(length(gs_genes) < 5) return(NULL) 
     
     gs_cor <- cor_mat[gs_genes, gs_genes]
@@ -146,7 +121,6 @@ run_gscore_analysis <- function(gene_set_list, cor_mat, threshold = 0.5) {
 }
 
 # 4. Run Analysis with a lower gene requirement
-# Sometimes pathways in your data are smaller than the standard 10
 gscore_kegg <- run_gscore_analysis(kegg_sets, cor_matrix, threshold = 0.5)
 gscore_go <- run_gscore_analysis(go_sets, cor_matrix, threshold = 0.5)
 
@@ -179,29 +153,6 @@ write.csv(gscore_kegg, "outputs/tables/gscore_kegg_results.csv")
 write.csv(gscore_go, "outputs/tables/gscore_go_results.csv")
 
 message("--- GScore Analysis Complete ---")
-
-#================Delete========================
-gscoreres <- readRDS("outputs/gscore_results.rds")
-gscore_go <- gscoreres$go
-gscore_kegg <- gscoreres$kegg
-
-total_gscore_go <- nrow(as.data.frame(gscore_go))
-total_gscore_kegg <- nrow(as.data.frame(gscore_kegg))
-cat("Total GSCORE GO BP:", total_gscore_go, "\n")
-cat("Total GSCORE KEGG:", total_gscore_kegg, "\n")
-
-# Extract Top 10 Terms for the Text and Table
-top_10_gscorego <- as.data.frame(gscore_go) %>% head(10)
-top_10_gscorekegg <- as.data.frame(gscore_kegg) %>% head(10)
-
-gscore_go_clean <- as.data.frame(gscore_go) %>%
-  select(ID, Description, pvalue, padj) %>%
-  head(10)
-
-gsscore_kegg_clean <- as.data.frame(gscore_kegg) %>%
-  select(ID, Description, pvalue, padj) %>%
-  head(10)
-#==============================================
 
 
 #  Save Objects for Comparison
@@ -238,7 +189,6 @@ print(dotplot(gsea_kegg, showCategory=20) + ggtitle("GSEA KEGG: Dotplot"))
 dev.off()
 
 png("outputs/figures/gsea_kegg_barplot.png", width = 800, height = 600)
-# For GSEA, barplots usually show the Normalized Enrichment Score (NES)
 print(df <- as.data.frame(gsea_kegg) %>% slice_max(abs(NES), n=20) %>%
         ggplot(aes(x=reorder(Description, NES), y=NES, fill=p.adjust)) +
         geom_bar(stat="identity") + coord_flip() + theme_minimal() +
@@ -263,12 +213,9 @@ library(stringr)
 library(ggplot2)
 
 plot_gscore <- function(data, type="dot", title="GScore") {
-  # 1. Filter for the top 20 most significant pathways
   top_data <- data %>% 
     slice_min(pvalue, n=20) %>%
-    # Ensure we use 'Description' for the label, fallback to ID if Description is missing
     mutate(Label = ifelse(is.na(Description), ID, Description)) %>%
-    # Shorten very long names so they fit on the plot
     mutate(Label = str_trunc(Label, 50))
   
   if(type == "dot") {
